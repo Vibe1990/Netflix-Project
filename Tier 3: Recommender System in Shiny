@@ -1,0 +1,182 @@
+# SIXTH STEP: Create a SHINY APP TO SHOW THIS OFF 
+
+library(bslib)
+
+ui = fluidPage(
+  theme = bs_theme(bootswatch = "simplex"),
+  navbarPage(
+    title = "Tier 3: Recommender Systems Using Netflix Data",
+    inverse = T,
+    navbarMenu(
+      title = "Content-Based Recommender",
+      tabPanel(title = "Using Jaccard's Distance Metric",
+               tags$div(HTML("<body>
+                              <p style = 'font-size: 120%; text-align: justify'>
+                                A way to utilize a KNN-algorithm to determine some movie/TV show recommendation based on what's available on Netflix.  However, in this case
+                                we have treated all relevant variables in our algorithm as a binary and rely on Jaccard's distance metric to determine recommendations. 
+                              </p>
+                             </body>")),
+               tags$br(),
+               sidebarLayout(
+                 sidebarPanel(
+                   textInput(inputId = "title_jaccard", label = "Enter the title of the Netflix content you would like recommendations to be based on."),
+                   textOutput(outputId = "title_check_jaccard"),
+                   tags$br(),
+                   numericInput(inputId = "neighbors_jaccard", label = "Number of recommendations that you would like", min = 1, max = nrow(netflix), value = 1)
+                 ),
+                 mainPanel(
+                   tableOutput(outputId = "jaccard_table")
+                 )
+               ) 
+               ), 
+      tabPanel(title = "Using Gower's Distance Metric",
+               tags$div(HTML("<body>
+                             <p style = 'font-size: 120%; text-align: justify'>
+                              Let's try doing the same thing but with a greater deal with complexity to recommend some movie/TV shows based on three different content on Netflix that have a ranking element included here.  Here
+                              we are utilizing a form of clustering that relies on the use of Gower's distance as opposed to Jaccard's distance metric. 
+                             </p>
+                             </body>")),
+               tags$br(),
+               sidebarLayout(
+                 sidebarPanel(
+                   helpText("In this section, we'll need you to enter the title of 3 TV series and/or Movies on Netflix that you're into in a ranked fashion."),  
+                   tags$br(),
+                   helpText("We'll use this as a benchmark to figure out what sort of other stuff on Netflix to recomment to you.  As a reminder, you'll need to be mindful of spelling and case."),
+                   tags$br(),
+                   textInput(inputId = "gower_entry_1", 
+                             label = "Put down the title for your top-ranked Netflix content here."),
+                   textOutput(outputId = "gower_entry_1_check"),
+                   tags$br(),
+                   textInput(inputId = "gower_entry_2", 
+                             label = "Put down the title for your second-ranked Netflix content here."),
+                   textOutput(outputId = "gower_entry_2_check"),
+                   tags$br(),
+                   textInput(inputId = "gower_entry_3", 
+                             label = "Put down the title for your third-ranked Netflix content here."),
+                   textOutput(outputId = "gower_entry_3_check"),
+                   tags$br(),
+                   numericInput(inputId = "neighbors_gower", label = "Number of recommendations that you would like", min = 1, max = nrow(netflix), value = 1)
+                 ),
+                 mainPanel(
+                   tableOutput(outputId = "Recommendations_Gower")
+                 )
+               )
+               )
+      )
+  )
+  
+)
+
+
+server = function(input, output){
+  
+  # Create a means to check if a text entry is valid or not!
+  
+  output$title_check_jaccard = renderText({
+    if(input$title_jaccard %in% netflix$title){
+      as.character("Valid entry")
+    } else {
+      as.character("Invalid entry. Check your spelling or I don't have this content in this data set.")
+    }
+  })
+  
+  
+  # Need a means for generating a dataframe to display our recommendation choices...ultimately, I need to create a reactive function that changes with the inputs 
+  
+  
+  output$jaccard_table = renderTable({
+    new_recommendation(input$title_jaccard, netflix_for_matrix, netflix_matrix, input$neighbors_jaccard, netflix)
+  })
+  
+  # Create a means to check if the text entry is valid or not
+  
+  output$gower_entry_1_check = renderText({
+    
+    if (input$gower_entry_1 %in% netflix_gower_combine$title) {
+      as.character("Yes this title can be used")
+    } else {
+      as.character("Something went wrong here.  Either there was a mistake in the entry (spelling or case-issue) or this isn't available in what I used in my current Netflix data set.")
+    }
+    
+  })
+  
+  output$gower_entry_2_check = renderText({
+    
+    if (input$gower_entry_2 %in% netflix_gower_combine$title) {
+      as.character("Yes this title can be used")
+    } else {
+      as.character("Something went wrong here.  Either there was a mistake in the entry (spelling or case-issue) or this isn't available in what I used in my current Netflix data set.")
+    }
+    
+  })
+  
+  output$gower_entry_3_check = renderText({
+    
+    if (input$gower_entry_3 %in% netflix_gower_combine$title) {
+      as.character("Yes this title can be used")
+    } else {
+      as.character("Something went wrong here.  Either there was a mistake in the entry (spelling or case-issue) or this isn't available in what I used in my current Netflix data set.")
+    }
+    
+  })
+  
+  # Create a thing that subsets the netflix_recommender_dataset to be used. Plan to use this as the input for the actual recommender system
+  
+  subset_dataset = reactive({
+    netflix_gower_combine %>% 
+      filter(title == input$gower_entry_1 | title == input$gower_entry_2 | title == input$gower_entry_3) %>% 
+      mutate(ranking = ifelse(title == input$gower_entry_1, 1.010, ifelse(title == input$gower_entry_2, 1.005, 1.001)))
+  })
+  
+  
+  
+  # CREATE A MEANS TO PRODUCE RECOMMENDATIONS WITH GOWER DISTANCE 
+  
+  recommending = reactive({
+    
+    number_of_picks = as.numeric(input$neighbors_gower)
+    placeholder_selection_data= subset_dataset()
+    column_1 = netflix_gower_combine$show_id[netflix_gower_combine$title == as.character(input$gower_entry_1)]
+    column_2 = netflix_gower_combine$show_id[netflix_gower_combine$title == as.character(input$gower_entry_2)]
+    column_3 = netflix_gower_combine$show_id[netflix_gower_combine$title == as.character(input$gower_entry_3)]
+    
+    selected_indices = which(colnames(dissimilarity_gower_1) %in% placeholder_selection_data$show_id)
+    getting_dataframe = data.frame(dissimilarity_gower_1[, selected_indices], recommended_netflix_content = row.names(dissimilarity_gower_1))
+    
+    recommendation_data = getting_dataframe %>% 
+      pivot_longer(
+        cols = c(column_1, column_2, column_3), 
+        values_to = "dissimilarity", 
+        names_to = "watched_content"
+      ) %>% 
+      left_join(placeholder_selection_data, by =  c("watched_content" = "show_id")) %>% 
+      filter(recommended_netflix_content != watched_content) %>%
+      mutate(
+        similarity = 1 - dissimilarity, 
+        weighted_similarity = similarity*ranking
+      ) %>% 
+      group_by(recommended_netflix_content) %>% 
+      arrange(desc(weighted_similarity)) %>% 
+      slice(1) %>% 
+      arrange(desc(weighted_similarity))
+    
+    top_recommendations = head(recommendation_data, number_of_picks)
+    
+    top_recommendations = top_recommendations %>% 
+      left_join(netflix_gower_combine, by = c("recommended_netflix_content" = "show_id"))
+    
+    top_recommendations = top_recommendations %>% 
+      left_join(netflix_gower_combine, by = c("recommended_netflix_content" = "show_id")) %>% 
+      select(recommended_netflix_content, title.y, description.y, weighted_similarity, type.y, cast_lead.y)
+    
+    selection = top_recommendations %>% select(title.y, recommended_netflix_content, weighted_similarity, description.y)
+    colnames(selection) = c("Suggested Titles", "Show Id", "Weighted Similarity Score", "Description")
+    selection 
+  })
+  
+  output$Recommendations_Gower = renderTable({recommending()})
+
+}
+
+
+shinyApp(ui, server)
